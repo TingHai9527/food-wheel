@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>今天吃什么 · 吃饭转盘</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b24; --panel2:#1c2230; --line:#2a3344;
+    --text:#e8ecf3; --muted:#8b94a7; --accent:#f5a623; --accent2:#ff6b4a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #1b2333 0%, transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%; padding:28px 16px 40px;
+  }
+  header{text-align:center; margin-bottom:22px;}
+  header h1{font-size:26px; font-weight:700; letter-spacing:2px;}
+  header h1 span{color:var(--accent);}
+  header p{color:var(--muted); font-size:13px; margin-top:6px;}
+  .stage{position:relative; width:min(78vw, 400px); aspect-ratio:1/1; margin:0 auto;}
+  canvas{width:100%; height:100%; display:block; border-radius:50%; cursor:pointer;
+    box-shadow:0 0 0 10px rgba(255,255,255,.04), 0 20px 60px rgba(0,0,0,.5), 0 0 90px rgba(245,166,35,.07);}
+  .pointer{
+    position:absolute; top:-8px; left:50%; transform:translateX(-50%);
+    width:0; height:0; z-index:5;
+    border-left:14px solid transparent; border-right:14px solid transparent;
+    border-top:26px solid var(--accent2);
+    filter:drop-shadow(0 3px 6px rgba(0,0,0,.45));
+  }
+  .spin-btn{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:26%; height:26%; border-radius:50%; z-index:6;
+    border:none; cursor:pointer;
+    background:radial-gradient(circle at 35% 30%, #3a4458, #20263a 70%);
+    color:#fff; font-size:18px; font-weight:700; letter-spacing:2px;
+    box-shadow:0 6px 18px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.12);
+    transition:transform .12s ease, background .2s ease;
+  }
+  .spin-btn:hover{transform:translate(-50%,-50%) scale(1.05); background:radial-gradient(circle at 35% 30%, #47536b, #262d43 70%);}
+  .spin-btn:active{transform:translate(-50%,-50%) scale(.96);}
+  .spin-btn:disabled{cursor:not-allowed; opacity:.75;}
+  .controls{display:flex; align-items:center; justify-content:center; gap:10px; margin-top:20px; flex-wrap:wrap;}
+  .controls select{
+    padding:9px 12px; border-radius:9px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-size:14px; outline:none;
+  }
+  .controls select:focus{border-color:var(--accent);}
+  .hint{text-align:center; color:var(--muted); font-size:12px; margin-top:10px; max-width:480px; line-height:1.7;}
+  .result{margin:22px auto 0; max-width:480px; text-align:center; min-height:64px;}
+  .result .label{color:var(--muted); font-size:13px;}
+  .result .pick{
+    margin-top:6px; font-size:30px; font-weight:800; color:var(--accent);
+    min-height:44px; display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .panel{
+    margin-top:28px; width:min(92vw, 480px);
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:18px 18px 16px;
+  }
+  .panel summary{cursor:pointer; font-size:15px; font-weight:600; color:var(--text); list-style:none; user-select:none;}
+  .panel summary::-webkit-details-marker{display:none;}
+  .panel summary .badge{display:inline-block; margin-left:8px; padding:1px 8px; border-radius:10px; background:#222b3d; color:var(--muted); font-size:12px;}
+  .panel[open] summary{margin-bottom:12px;}
+  .panel-note{color:var(--muted); font-size:12px; line-height:1.7; margin-bottom:12px;}
+  .add-row{display:flex; gap:8px; margin-bottom:14px;}
+  .add-row input{
+    flex:1; padding:9px 12px; border-radius:9px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--text); font-size:14px; outline:none;
+  }
+  .add-row input:focus{border-color:var(--accent);}
+  .btn{
+    padding:9px 16px; border-radius:9px; border:none; cursor:pointer;
+    font-size:14px; font-weight:600; color:#fff;
+    background:linear-gradient(135deg, var(--accent), var(--accent2));
+  }
+  .btn.ghost{background:transparent; border:1px solid var(--line); color:var(--muted); font-weight:500;}
+  .btn.ghost:hover{color:var(--text); border-color:#3b475e;}
+  .food-list{display:flex; flex-wrap:wrap; gap:8px;}
+  .food-item{
+    display:flex; align-items:center; gap:4px;
+    background:var(--panel2); border:1px solid var(--line); border-radius:20px;
+    padding:4px 6px 4px 12px; font-size:13px;
+  }
+  .food-item .cat-tag{color:#6b7690; font-size:11px;}
+  .food-item input{
+    background:transparent; border:none; color:var(--text); font-size:13px; width:88px; outline:none;
+  }
+  .food-item .del{
+    border:none; background:#313a4e; color:var(--muted); border-radius:50%;
+    width:22px; height:22px; cursor:pointer; font-size:12px; line-height:1;
+  }
+  .food-item .del:hover{background:#4a3b45; color:#ff8a7a;}
+  .panel-foot{display:flex; justify-content:space-between; align-items:center; margin-top:14px; gap:8px; flex-wrap:wrap;}
+  .empty{color:var(--muted); font-size:13px; padding:8px 0; text-align:center;}
+  footer{margin-top:26px; color:#5a6478; font-size:12px; text-align:center;}
+  footer .tip{color:#6b7690; margin-top:6px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>今天<span>吃</span>什么</h1>
+  <p>别纠结了，让转盘替你决定</p>
+</header>
+
+<div class="stage">
+  <div class="pointer"></div>
+  <canvas id="wheel"></canvas>
+  <button id="spinBtn" class="spin-btn" type="button">开转</button>
+</div>
+
+<div class="controls">
+  <select id="catSelect" aria-label="食物类别筛选"></select>
+</div>
+<p class="hint" id="libHint">加载中…</p>
+
+<div class="result">
+  <div class="label" id="resLabel">转一下，看看今天吃什么</div>
+  <div class="pick"><span id="resName"></span></div>
+</div>
+
+<details class="panel" id="panel">
+  <summary>编辑菜单 <span class="badge" id="countBadge">0 项</span></summary>
+  <p class="panel-note">食物库里的每一项都在转盘上。悬停可查看某个食物的名称，抽中后会高亮显示；删除某项会立即从转盘移除；新增的食物会加入库，并出现在「全部类别」中。</p>
+  <div class="add-row">
+    <input id="addInput" type="text" maxlength="12" placeholder="输入想吃的食物，如：麻辣香锅">
+    <button class="btn" id="addBtn" type="button">添加</button>
+  </div>
+  <div class="food-list" id="foodList"></div>
+  <div class="panel-foot">
+    <button class="btn ghost" id="resetBtn" type="button">恢复默认食物库</button>
+    <span class="tip">改动会自动保存在浏览器中</span>
+  </div>
+</details>
+
+<footer>
+  <div>今天吃什么 · 本地使用，无需联网</div>
+  <div class="tip">点击中央按钮或按空格键开转</div>
+</footer>
+
+<script>
+"use strict";
+(function(){
+  var CATS = [
+    { id: "rice",     name: "米饭主食" },
+    { id: "noodle",   name: "面条" },
+    { id: "fentiao",  name: "米粉粉丝" },
+    { id: "dimsum",   name: "面点小吃" },
+    { id: "hotpot",   name: "火锅烧烤" },
+    { id: "fastfood", name: "快餐异国" },
+    { id: "light",    name: "轻食健康" },
+    { id: "dessert",  name: "甜品饮品" }
+  ];
+  var CUSTOM_ID = "custom";
+
+  // 内置食物库：约 300 项，n=名称，c=类别
+  var FOOD_LIBRARY = [
+    // 米饭主食 rice
+    { n: "米饭套餐", c: "rice" }, { n: "蛋炒饭", c: "rice" }, { n: "扬州炒饭", c: "rice" },
+    { n: "酱油炒饭", c: "rice" }, { n: "腊肠炒饭", c: "rice" }, { n: "泡菜炒饭", c: "rice" },
+    { n: "石锅拌饭", c: "rice" }, { n: "韩式拌饭", c: "rice" }, { n: "煲仔饭", c: "rice" },
+    { n: "腊味煲仔饭", c: "rice" }, { n: "盖浇饭", c: "rice" }, { n: "鱼香肉丝饭", c: "rice" },
+    { n: "宫保鸡丁饭", c: "rice" }, { n: "卤肉饭", c: "rice" }, { n: "猪脚饭", c: "rice" },
+    { n: "隆江猪脚饭", c: "rice" }, { n: "鸡排饭", c: "rice" }, { n: "咖喱鸡饭", c: "rice" },
+    { n: "照烧鸡排饭", c: "rice" }, { n: "肥牛饭", c: "rice" }, { n: "牛丼饭", c: "rice" },
+    { n: "鳗鱼饭", c: "rice" }, { n: "三文鱼饭", c: "rice" }, { n: "菜泡饭", c: "rice" },
+    { n: "海苔饭团", c: "rice" }, { n: "紫菜包饭", c: "rice" }, { n: "牛肉饭", c: "rice" },
+    { n: "香菇滑鸡饭", c: "rice" }, { n: "白粥", c: "rice" }, { n: "皮蛋瘦肉粥", c: "rice" },
+    { n: "瘦肉粥", c: "rice" }, { n: "八宝粥", c: "rice" }, { n: "小米粥", c: "rice" },
+    { n: "南瓜粥", c: "rice" }, { n: "黄焖鸡米饭", c: "rice" }, { n: "鸡公煲", c: "rice" },
+    { n: "大盘鸡拌饭", c: "rice" }, { n: "咖喱牛腩饭", c: "rice" }, { n: "蛋包饭", c: "rice" },
+    { n: "猪油拌饭", c: "rice" }, { n: "糙米饭便当", c: "rice" },
+    // 面条 noodle
+    { n: "牛肉面", c: "noodle" }, { n: "兰州拉面", c: "noodle" }, { n: "重庆小面", c: "noodle" },
+    { n: "宜宾燃面", c: "noodle" }, { n: "担担面", c: "noodle" }, { n: "炸酱面", c: "noodle" },
+    { n: "阳春面", c: "noodle" }, { n: "葱油拌面", c: "noodle" }, { n: "热干面", c: "noodle" },
+    { n: "凉面", c: "noodle" }, { n: "朝鲜冷面", c: "noodle" }, { n: "刀削面", c: "noodle" },
+    { n: "油泼面", c: "noodle" }, { n: "裤带面", c: "noodle" }, { n: "臊子面", c: "noodle" },
+    { n: "烩面", c: "noodle" }, { n: "板面", c: "noodle" }, { n: "炒面", c: "noodle" },
+    { n: "炒河粉", c: "noodle" }, { n: "干炒牛河", c: "noodle" }, { n: "乌冬面", c: "noodle" },
+    { n: "日式拉面", c: "noodle" }, { n: "豚骨拉面", c: "noodle" }, { n: "味噌拉面", c: "noodle" },
+    { n: "意面", c: "noodle" }, { n: "奶油意面", c: "noodle" }, { n: "番茄意面", c: "noodle" },
+    { n: "黑椒牛柳面", c: "noodle" }, { n: "酸汤面", c: "noodle" }, { n: "鸡汤面", c: "noodle" },
+    { n: "排骨面", c: "noodle" }, { n: "大排面", c: "noodle" }, { n: "雪菜肉丝面", c: "noodle" },
+    { n: "黄鱼面", c: "noodle" }, { n: "片儿川", c: "noodle" }, { n: "锅盖面", c: "noodle" },
+    { n: "焖面", c: "noodle" }, { n: "豆角焖面", c: "noodle" }, { n: "沙茶面", c: "noodle" },
+    { n: "肥肠面", c: "noodle" }, { n: "牛杂面", c: "noodle" }, { n: "鱼汤面", c: "noodle" },
+    { n: "蒜苔肉丝面", c: "noodle" },
+    // 米粉粉丝 fentiao
+    { n: "螺蛳粉", c: "fentiao" }, { n: "桂林米粉", c: "fentiao" }, { n: "湖南米粉", c: "fentiao" },
+    { n: "过桥米线", c: "fentiao" }, { n: "米线", c: "fentiao" }, { n: "酸辣粉", c: "fentiao" },
+    { n: "新疆炒米粉", c: "fentiao" }, { n: "花甲粉", c: "fentiao" }, { n: "鸭血粉丝汤", c: "fentiao" },
+    { n: "红薯粉", c: "fentiao" }, { n: "土豆粉", c: "fentiao" }, { n: "砂锅米线", c: "fentiao" },
+    { n: "牛肉米粉", c: "fentiao" }, { n: "肥肠粉", c: "fentiao" }, { n: "酸菜鱼粉", c: "fentiao" },
+    { n: "粉丝煲", c: "fentiao" }, { n: "陈村粉", c: "fentiao" }, { n: "猪肠粉", c: "fentiao" },
+    { n: "粿条", c: "fentiao" },
+    // 面点小吃 dimsum
+    { n: "饺子", c: "dimsum" }, { n: "水饺", c: "dimsum" }, { n: "煎饺", c: "dimsum" },
+    { n: "蒸饺", c: "dimsum" }, { n: "馄饨", c: "dimsum" }, { n: "云吞", c: "dimsum" },
+    { n: "抄手", c: "dimsum" }, { n: "小笼包", c: "dimsum" }, { n: "灌汤包", c: "dimsum" },
+    { n: "生煎", c: "dimsum" }, { n: "锅贴", c: "dimsum" }, { n: "烧麦", c: "dimsum" },
+    { n: "肉包", c: "dimsum" }, { n: "菜包", c: "dimsum" }, { n: "馒头", c: "dimsum" },
+    { n: "花卷", c: "dimsum" }, { n: "肉夹馍", c: "dimsum" }, { n: "凉皮", c: "dimsum" },
+    { n: "米皮", c: "dimsum" }, { n: "煎饼果子", c: "dimsum" }, { n: "鸡蛋灌饼", c: "dimsum" },
+    { n: "手抓饼", c: "dimsum" }, { n: "酱香饼", c: "dimsum" }, { n: "葱油饼", c: "dimsum" },
+    { n: "烧饼", c: "dimsum" }, { n: "锅盔", c: "dimsum" }, { n: "韭菜盒子", c: "dimsum" },
+    { n: "油条", c: "dimsum" }, { n: "春卷", c: "dimsum" }, { n: "麻团", c: "dimsum" },
+    { n: "糯米鸡", c: "dimsum" }, { n: "烤冷面", c: "dimsum" }, { n: "臭豆腐", c: "dimsum" },
+    { n: "铁板豆腐", c: "dimsum" }, { n: "狼牙土豆", c: "dimsum" }, { n: "烤面筋", c: "dimsum" },
+    { n: "炸串", c: "dimsum" }, { n: "钵钵鸡", c: "dimsum" }, { n: "糖葫芦", c: "dimsum" },
+    { n: "糖油粑粑", c: "dimsum" }, { n: "蛋烘糕", c: "dimsum" }, { n: "红糖糍粑", c: "dimsum" },
+    { n: "糯米糍", c: "dimsum" },
+    // 火锅烧烤 hotpot
+    { n: "火锅", c: "hotpot" }, { n: "麻辣火锅", c: "hotpot" }, { n: "重庆火锅", c: "hotpot" },
+    { n: "清汤火锅", c: "hotpot" }, { n: "涮羊肉", c: "hotpot" }, { n: "潮汕牛肉火锅", c: "hotpot" },
+    { n: "冬阴功火锅", c: "hotpot" }, { n: "串串香", c: "hotpot" }, { n: "麻辣烫", c: "hotpot" },
+    { n: "冒菜", c: "hotpot" }, { n: "关东煮", c: "hotpot" }, { n: "烧烤", c: "hotpot" },
+    { n: "烤串", c: "hotpot" }, { n: "烤羊肉串", c: "hotpot" }, { n: "烤鱼", c: "hotpot" },
+    { n: "纸上烤鱼", c: "hotpot" }, { n: "铁板烧", c: "hotpot" }, { n: "烤肉", c: "hotpot" },
+    { n: "韩式烤肉", c: "hotpot" }, { n: "日式烧肉", c: "hotpot" }, { n: "铁锅炖", c: "hotpot" },
+    { n: "地锅鸡", c: "hotpot" }, { n: "椰子鸡", c: "hotpot" }, { n: "猪肚鸡", c: "hotpot" },
+    { n: "花胶鸡", c: "hotpot" }, { n: "酸菜鱼", c: "hotpot" }, { n: "水煮鱼", c: "hotpot" },
+    { n: "水煮肉片", c: "hotpot" }, { n: "毛血旺", c: "hotpot" }, { n: "小龙虾", c: "hotpot" },
+    { n: "大闸蟹", c: "hotpot" }, { n: "麻辣香锅", c: "hotpot" }, { n: "干锅牛蛙", c: "hotpot" },
+    { n: "干锅肥肠", c: "hotpot" }, { n: "牛蛙煲", c: "hotpot" }, { n: "羊蝎子", c: "hotpot" },
+    { n: "牛杂煲", c: "hotpot" }, { n: "海鲜锅", c: "hotpot" }, { n: "骨头汤火锅", c: "hotpot" },
+    { n: "酸汤火锅", c: "hotpot" },
+    // 快餐异国 fastfood
+    { n: "汉堡", c: "fastfood" }, { n: "牛肉汉堡", c: "fastfood" }, { n: "芝士汉堡", c: "fastfood" },
+    { n: "鸡腿堡", c: "fastfood" }, { n: "薯条", c: "fastfood" }, { n: "炸鸡", c: "fastfood" },
+    { n: "炸鸡排", c: "fastfood" }, { n: "香辣鸡翅", c: "fastfood" }, { n: "鸡米花", c: "fastfood" },
+    { n: "热狗", c: "fastfood" }, { n: "三明治", c: "fastfood" }, { n: "火腿三明治", c: "fastfood" },
+    { n: "金枪鱼三明治", c: "fastfood" }, { n: "帕尼尼", c: "fastfood" }, { n: "披萨", c: "fastfood" },
+    { n: "玛格丽特披萨", c: "fastfood" }, { n: "至尊披萨", c: "fastfood" }, { n: "寿司", c: "fastfood" },
+    { n: "三文鱼寿司", c: "fastfood" }, { n: "手握寿司", c: "fastfood" }, { n: "刺身", c: "fastfood" },
+    { n: "日式咖喱", c: "fastfood" }, { n: "寿喜烧", c: "fastfood" }, { n: "章鱼小丸子", c: "fastfood" },
+    { n: "大阪烧", c: "fastfood" }, { n: "天妇罗", c: "fastfood" }, { n: "越南春卷", c: "fastfood" },
+    { n: "越南河粉", c: "fastfood" }, { n: "冬阴功汤", c: "fastfood" }, { n: "菠萝炒饭", c: "fastfood" },
+    { n: "泰式咖喱", c: "fastfood" }, { n: "韩式炸鸡", c: "fastfood" }, { n: "部队火锅", c: "fastfood" },
+    { n: "石锅鱼", c: "fastfood" }, { n: "牛油果寿司", c: "fastfood" }, { n: "手卷", c: "fastfood" },
+    { n: "军舰寿司", c: "fastfood" }, { n: "墨西哥卷饼", c: "fastfood" }, { n: "西班牙海鲜饭", c: "fastfood" },
+    { n: "意式烩饭", c: "fastfood" }, { n: "咖喱乌冬", c: "fastfood" }, { n: "黎巴嫩卷", c: "fastfood" },
+    // 轻食健康 light
+    { n: "蔬菜沙拉", c: "light" }, { n: "鸡肉沙拉", c: "light" }, { n: "凯撒沙拉", c: "light" },
+    { n: "牛油果沙拉", c: "light" }, { n: "鸡胸肉餐", c: "light" }, { n: "轻食沙拉", c: "light" },
+    { n: "藜麦沙拉", c: "light" }, { n: "全麦三明治", c: "light" }, { n: "荞麦面", c: "light" },
+    { n: "燕麦碗", c: "light" }, { n: "酸奶碗", c: "light" }, { n: "水果碗", c: "light" },
+    { n: "希腊酸奶", c: "light" }, { n: "水煮蛋", c: "light" }, { n: "蒸红薯", c: "light" },
+    { n: "烤红薯", c: "light" }, { n: "水煮玉米", c: "light" }, { n: "水煮西兰花", c: "light" },
+    { n: "豆腐沙拉", c: "light" }, { n: "鹰嘴豆泥", c: "light" }, { n: "杂粮饭", c: "light" },
+    { n: "蒸南瓜", c: "light" }, { n: "凉拌黄瓜", c: "light" }, { n: "白灼虾", c: "light" },
+    { n: "凉拌鸡丝", c: "light" }, { n: "蔬菜汤", c: "light" }, { n: "魔芋面", c: "light" },
+    { n: "蛋白粉奶昔", c: "light" },
+    // 甜品饮品 dessert
+    { n: "珍珠奶茶", c: "dessert" }, { n: "奶绿", c: "dessert" }, { n: "柠檬茶", c: "dessert" },
+    { n: "果茶", c: "dessert" }, { n: "拿铁", c: "dessert" }, { n: "美式咖啡", c: "dessert" },
+    { n: "卡布奇诺", c: "dessert" }, { n: "抹茶拿铁", c: "dessert" }, { n: "鲜榨果汁", c: "dessert" },
+    { n: "椰子水", c: "dessert" }, { n: "冰淇淋", c: "dessert" }, { n: "圣代", c: "dessert" },
+    { n: "蛋糕", c: "dessert" }, { n: "提拉米苏", c: "dessert" }, { n: "慕斯", c: "dessert" },
+    { n: "布丁", c: "dessert" }, { n: "双皮奶", c: "dessert" }, { n: "杨枝甘露", c: "dessert" },
+    { n: "烧仙草", c: "dessert" }, { n: "芋圆", c: "dessert" }, { n: "红豆沙", c: "dessert" },
+    { n: "绿豆沙", c: "dessert" }, { n: "银耳羹", c: "dessert" }, { n: "醪糟", c: "dessert" },
+    { n: "蛋挞", c: "dessert" }, { n: "泡芙", c: "dessert" }, { n: "马卡龙", c: "dessert" },
+    { n: "甜甜圈", c: "dessert" }, { n: "华夫饼", c: "dessert" }, { n: "松饼", c: "dessert" },
+    { n: "班戟", c: "dessert" }, { n: "可颂", c: "dessert" }, { n: "贝果", c: "dessert" },
+    { n: "糖水", c: "dessert" }, { n: "冰粉", c: "dessert" }, { n: "凉糕", c: "dessert" },
+    { n: "姜撞奶", c: "dessert" }, { n: "龟苓膏", c: "dessert" }, { n: "杨梅冰", c: "dessert" },
+    { n: "雪媚娘", c: "dessert" }
+  ];
+
+  var LIB_KEY = "food-wheel-lib-v1";
+  var LEGACY_KEY = "food-wheel-list-v1";
+  var RESULT_KEY = "food-wheel-result-v1";
+
+  var store = (function(){
+    try {
+      var t = "test"; localStorage.setItem(t, t); localStorage.removeItem(t);
+      return localStorage;
+    } catch(e){
+      var mem = {};
+      return {
+        getItem:function(k){ return Object.prototype.hasOwnProperty.call(mem,k) ? mem[k] : null; },
+        setItem:function(k,v){ mem[k] = String(v); },
+        removeItem:function(k){ delete mem[k]; }
+      };
+    }
+  })();
+
+  function cloneLibrary(arr){ return arr.map(function(x){ return { n: x.n, c: x.c }; }); }
+
+  function loadLibrary(){
+    try {
+      var raw = store.getItem(LIB_KEY);
+      if(raw){
+        var arr = JSON.parse(raw);
+        if(Array.isArray(arr)){
+          var items = arr.filter(function(x){ return x && typeof x.n === "string" && x.n.trim().length > 0; })
+                         .map(function(x){
+                           var okCat = x.c === CUSTOM_ID || CATS.some(function(c){ return c.id === x.c; });
+                           return { n: x.n.trim(), c: okCat ? x.c : CUSTOM_ID };
+                         });
+          if(items.length) return items;
+        }
+      }
+      var legacy = store.getItem(LEGACY_KEY);
+      if(legacy){
+        var old = JSON.parse(legacy);
+        if(Array.isArray(old)){
+          var names = old.filter(function(x){ return typeof x === "string" && x.trim().length > 0; })
+                         .map(function(x){ return x.trim(); });
+          if(names.length) return names.map(function(x){ return { n: x, c: CUSTOM_ID }; });
+        }
+      }
+    } catch(e){}
+    return cloneLibrary(FOOD_LIBRARY);
+  }
+
+  function saveLibrary(){
+    try { store.setItem(LIB_KEY, JSON.stringify(library)); } catch(e){}
+  }
+
+  var library = loadLibrary();
+  var category = "ALL";
+  var board = [];
+
+  var canvas = document.getElementById("wheel");
+  var ctx = canvas.getContext("2d");
+  var spinBtn = document.getElementById("spinBtn");
+  var resName = document.getElementById("resName");
+  var resLabel = document.getElementById("resLabel");
+  var catSelect = document.getElementById("catSelect");
+  var libHint = document.getElementById("libHint");
+  var spinning = false;
+  var rotation = 0;
+  var lastWinIndex = -1;
+  var hoverIndex = -1;
+
+  function rebuildBoard(){
+    board = category === "ALL"
+      ? library.slice()
+      : library.filter(function(f){ return f.c === category; });
+    return board;
+  }
+
+  function catName(id){
+    if(id === CUSTOM_ID) return "自定义";
+    var c = CATS.filter(function(x){ return x.id === id; })[0];
+    return c ? c.name : "其他";
+  }
+
+  // ---- 转盘绘制与转动 ----
+  function resize(){
+    var dpr = window.devicePixelRatio || 1;
+    var size = canvas.clientWidth || 400;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    draw();
+  }
+
+  function hue(i){ return (i * 137.508) % 360; }
+  function segColor(i){
+    var h = hue(i);
+    return "hsl(" + h.toFixed(0) + ", 62%, " + (i % 2 ? 46 : 56) + "%)";
+  }
+  function truncate(s, n){ return s.length > n ? s.slice(0, n) + "…" : s; }
+
+  function draw(){
+    var w = canvas.width, h = canvas.height;
+    var cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 2;
+    var dpr = window.devicePixelRatio || 1;
+    var rCss = (canvas.clientWidth || 400) / 2;
+    ctx.clearRect(0, 0, w, h);
+    var n = board.length;
+
+    if(n === 0){
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#1a202c"; ctx.fill();
+      ctx.fillStyle = "#8b94a7";
+      ctx.font = (rCss * 0.09 * dpr) + "px 'Microsoft YaHei', sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("菜单还是空的", cx, cy);
+      return;
+    }
+
+    var seg = Math.PI * 2 / n;
+    var fontSize = Math.max(11, Math.min(24, (rCss * 0.62) / Math.max(n, 6) * 1.6));
+    var labelsOn = n <= 24; // 格数太多时文字会重叠，隐藏标签，靠悬停/中奖高亮显示
+    ctx.font = "600 " + (fontSize * dpr) + "px 'Microsoft YaHei', sans-serif";
+    ctx.textBaseline = "middle";
+
+    for(var i = 0; i < n; i++){
+      var start = -Math.PI / 2 + rotation + i * seg;
+      var end = start + seg;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, start, end);
+      ctx.closePath();
+      ctx.fillStyle = segColor(i);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,.28)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      var labelR = r - 14;
+      var arcW = 2 * labelR * Math.sin(seg / 2);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(start + seg / 2);
+      ctx.textAlign = "right";
+      ctx.fillStyle = "rgba(255,255,255,.95)";
+      ctx.shadowColor = "rgba(0,0,0,.5)";
+      ctx.shadowBlur = 3;
+      var name = truncate(board[i].n, 6);
+      if(labelsOn && ctx.measureText(name).width <= arcW){
+        ctx.fillText(name, labelR, 0);
+      }
+      ctx.restore();
+    }
+
+    if(lastWinIndex >= 0 && lastWinIndex < n){
+      var ws = -Math.PI / 2 + rotation + lastWinIndex * seg;
+      var we = ws + seg;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - 2, ws + seg * 0.05, we - seg * 0.05);
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 4 * dpr;
+      ctx.shadowColor = "rgba(255,255,255,.8)";
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(ws + seg / 2);
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#fff";
+      ctx.shadowColor = "rgba(0,0,0,.7)";
+      ctx.shadowBlur = 6;
+      ctx.font = "700 " + Math.min(26, rCss * 0.1 * dpr) + "px 'Microsoft YaHei', sans-serif";
+      ctx.fillText(board[lastWinIndex].n, r - 20, 0);
+      ctx.restore();
+    }
+
+    if(hoverIndex >= 0 && hoverIndex < n && !spinning){
+      var hs = -Math.PI / 2 + rotation + hoverIndex * seg;
+      var he = hs + seg;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, hs + seg * 0.06, he - seg * 0.06);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,255,255,.22)";
+      ctx.fill();
+    }
+
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.16, 0, Math.PI * 2);
+    ctx.fillStyle = "#20263a"; ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.15)"; ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  function refreshResult(){
+    if(lastWinIndex >= 0 && lastWinIndex < board.length){
+      resName.textContent = board[lastWinIndex].n;
+      resLabel.textContent = "今天的答案";
+      return;
+    }
+    var stored = null;
+    try { stored = store.getItem(RESULT_KEY); } catch(e){}
+    if(stored){
+      resName.textContent = stored;
+      resLabel.textContent = "上次抽中的美食";
+    } else {
+      resName.textContent = "";
+      resLabel.textContent = "转一下，看看今天吃什么";
+    }
+  }
+
+  function showResult(name, index){
+    lastWinIndex = index;
+    try { store.setItem(RESULT_KEY, name); } catch(e){}
+    refreshResult();
+    draw();
+  }
+
+  function hoverIndexFromEvent(e){
+    var rect = canvas.getBoundingClientRect();
+    var cxCss = rect.width / 2, cyCss = rect.height / 2;
+    var dx = e.clientX - rect.left - cxCss;
+    var dy = e.clientY - rect.top - cyCss;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if(dist > cxCss || dist < cxCss * 0.1 || board.length === 0) return -1;
+    var ang = Math.atan2(dy, dx) + Math.PI / 2 - rotation;
+    ang = ((ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    var idx = Math.floor(ang / (Math.PI * 2 / board.length));
+    return (idx >= 0 && idx < board.length) ? idx : -1;
+  }
+
+  canvas.addEventListener("mousemove", function(e){
+    if(spinning) return;
+    hoverIndex = hoverIndexFromEvent(e);
+    if(hoverIndex >= 0){
+      resName.textContent = board[hoverIndex].n;
+      resLabel.textContent = "你指的：";
+    } else {
+      refreshResult();
+    }
+    draw();
+  });
+  canvas.addEventListener("mouseleave", function(){
+    hoverIndex = -1;
+    refreshResult();
+    draw();
+  });
+
+  function spin(){
+    if(spinning) return;
+    var n = board.length;
+    if(n === 0) return;
+    if(n === 1){ showResult(board[0].n, 0); return; }
+    spinning = true;
+    spinBtn.disabled = true;
+    lastWinIndex = -1;   // 清除上一次的中奖标注，避免旧文字随轮盘残留
+    hoverIndex = -1;
+    resName.textContent = "";
+    resLabel.textContent = "转动中…";
+    draw();
+
+    var seg = Math.PI * 2 / n;
+    var k = Math.floor(Math.random() * n);
+    var offset = (rotation + k * seg + seg / 2) % (Math.PI * 2);
+    var spins = 5 + Math.floor(Math.random() * 3); // 整数圈数，保证落点对准指针
+    var target = rotation + spins * Math.PI * 2 + (Math.PI * 2 - offset);
+    var total = target - rotation;
+    var startRot = rotation;
+    var duration = 4200 + Math.random() * 900;
+    var t0 = performance.now();
+
+    function frame(now){
+      var t = Math.min(1, (now - t0) / duration);
+      var eased = 1 - Math.pow(1 - t, 4);
+      rotation = startRot + total * eased;
+      draw();
+      if(t < 1){
+        requestAnimationFrame(frame);
+      } else {
+        rotation = rotation % (Math.PI * 2);
+        spinning = false;
+        spinBtn.disabled = false;
+        showResult(board[k].n, k);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---- 分类筛选 / 换一批 ----
+  function rebuildCatSelect(){
+    catSelect.innerHTML = "";
+    var opts = [{ id: "ALL", name: "全部类别" }].concat(CATS);
+    var hasCustom = library.some(function(f){ return f.c === CUSTOM_ID; });
+    if(hasCustom) opts.push({ id: CUSTOM_ID, name: "自定义" });
+    opts.forEach(function(o){
+      var opt = document.createElement("option");
+      opt.value = o.id;
+      opt.textContent = o.name;
+      if(o.id === category) opt.selected = true;
+      catSelect.appendChild(opt);
+    });
+  }
+
+  catSelect.addEventListener("change", function(){
+    category = catSelect.value;
+    rebuildBoard();
+    lastWinIndex = -1;
+    hoverIndex = -1;
+    refreshResult();
+    draw();
+    renderList();
+  });
+
+  // ---- 菜单编辑 ----
+  var listEl = document.getElementById("foodList");
+  var addInput = document.getElementById("addInput");
+  var countBadge = document.getElementById("countBadge");
+
+  function updateHint(){
+    libHint.textContent = "食物库共 " + library.length + " 项，全部在转盘上"
+      + (category === "ALL" ? "" : "（当前只看「" + catName(category) + "」）")
+      + "。把鼠标移到转盘上可查看每个食物的名称";
+  }
+
+  function renderList(){
+    listEl.innerHTML = "";
+    countBadge.textContent = board.length + " 项 / 库 " + library.length + " 项";
+    if(board.length === 0){
+      var d = document.createElement("div");
+      d.className = "empty";
+      d.textContent = "食物库是空的，先添加一些想吃的吧";
+      listEl.appendChild(d);
+      return;
+    }
+    board.forEach(function(f, idx){
+      var item = document.createElement("div");
+      item.className = "food-item";
+
+      var tag = document.createElement("span");
+      tag.className = "cat-tag";
+      tag.textContent = catName(f.c);
+
+      var input = document.createElement("input");
+      input.type = "text"; input.maxLength = 12;
+      input.value = f.n;
+      input.addEventListener("change", function(){
+        var v = input.value.trim();
+        if(v && v !== f.n){
+          if(library.some(function(x){ return x !== f && x.n === v; })){
+            input.value = f.n;
+            return;
+          }
+          f.n = v;
+          saveLibrary();
+          draw();
+        } else {
+          input.value = f.n;
+        }
+      });
+      input.addEventListener("keydown", function(e){
+        if(e.key === "Enter") input.blur();
+      });
+
+      var del = document.createElement("button");
+      del.type = "button";
+      del.className = "del";
+      del.textContent = "✕";
+      del.setAttribute("aria-label", "删除");
+      del.addEventListener("click", function(){
+        library = library.filter(function(x){ return !(x === f || (x.n === f.n && x.c === f.c)); });
+        rebuildBoard();
+        lastWinIndex = -1;
+        hoverIndex = -1;
+        refreshResult();
+        saveLibrary();
+        rebuildCatSelect();
+        updateHint();
+        renderList();
+        draw();
+      });
+
+      item.appendChild(tag);
+      item.appendChild(input);
+      item.appendChild(del);
+      listEl.appendChild(item);
+    });
+  }
+
+  function addFood(){
+    var v = addInput.value.trim();
+    if(!v) return;
+    if(library.some(function(x){ return x.n === v; })){ addInput.value = ""; return; }
+    var item = { n: v, c: CUSTOM_ID };
+    library.push(item);
+    rebuildBoard();
+    addInput.value = "";
+    saveLibrary();
+    rebuildCatSelect();
+    updateHint();
+    lastWinIndex = -1;
+    hoverIndex = -1;
+    refreshResult();
+    renderList();
+    draw();
+  }
+
+  addInput.addEventListener("keydown", function(e){ if(e.key === "Enter") addFood(); });
+  document.getElementById("addBtn").addEventListener("click", addFood);
+  document.getElementById("resetBtn").addEventListener("click", function(){
+    if(confirm("确定恢复默认食物库？你自定义和删除的改动都会被覆盖。")){
+      library = cloneLibrary(FOOD_LIBRARY);
+      category = "ALL";
+      rebuildBoard();
+      lastWinIndex = -1;
+      hoverIndex = -1;
+      refreshResult();
+      saveLibrary();
+      rebuildCatSelect();
+      catSelect.value = "ALL";
+      updateHint();
+      renderList();
+      draw();
+    }
+  });
+
+  spinBtn.addEventListener("click", spin);
+  document.addEventListener("keydown", function(e){
+    if(e.key === " " && e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON" && e.target.tagName !== "TEXTAREA" && e.target.tagName !== "SELECT"){
+      e.preventDefault();
+      spin();
+    }
+  });
+
+  window.addEventListener("resize", resize);
+
+  // 初始化
+  rebuildBoard();
+  rebuildCatSelect();
+  updateHint();
+  resize();
+  renderList();
+  refreshResult();
+})();
+</script>
+</body>
+</html>
